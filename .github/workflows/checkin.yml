@@ -2,8 +2,10 @@ name: GLaDOS 2026 Checkin
 
 on:
   schedule:
-    # 北京时间 09:30（UTC 01:30）。一天一次即可，脚本会在失败时自动重试。
+    # 北京时间 09:30 签到；16:23 和 21:17 补漏。当天成功后自动跳过。
     - cron: '30 1 * * *'
+    - cron: '23 8 * * *'
+    - cron: '17 13 * * *'
   workflow_dispatch:
     inputs:
       dispatch_source:
@@ -37,19 +39,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Get Beijing date
+        id: day
+        run: printf 'date=%s\n' "$(TZ=Asia/Shanghai date +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore today's successful check-in
+        id: completed
+        if: inputs.diagnose_only != true
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: .checkin-state/success
+          key: glados-checkin-success-v1-${{ github.repository_id }}-${{ steps.day.outputs.date }}
+
+      - name: Skip an already completed day
+        if: steps.completed.outputs.cache-hit == 'true'
+        run: echo '今天已经签到成功，跳过本次补漏检查。'
+
       - name: Setup Python
+        if: steps.completed.outputs.cache-hit != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install Dependencies
+        if: steps.completed.outputs.cache-hit != 'true'
         run: python -m pip install -r requirements.txt
 
       - name: Run Tests
+        if: steps.completed.outputs.cache-hit != 'true'
         run: python -m unittest discover -s tests -v
 
       - name: Run Checkin
+        id: checkin
+        if: steps.completed.outputs.cache-hit != 'true'
         run: python checkin.py
         timeout-minutes: 8
         env:
@@ -66,3 +90,20 @@ jobs:
           EXCHANGE_PLAN: 'off' # Only check in. Never redeem points for membership days.
           CHECKIN_MAX_ATTEMPTS: '3'
           CHECKIN_RETRY_DELAY_SECONDS: '60'
+
+      - name: Record successful check-in
+        if: steps.checkin.outcome == 'success' && inputs.diagnose_only != true
+        env:
+          CHECKIN_DAY: ${{ steps.day.outputs.date }}
+        run: |
+          mkdir -p .checkin-state
+          printf '%s\n' "$CHECKIN_DAY" > .checkin-state/success
+
+      - name: Save today's successful check-in
+        if: steps.checkin.outcome == 'success' && inputs.diagnose_only != true
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: .checkin-state/success
+          key: glados-checkin-success-v1-${{ github.repository_id }}-${{ steps.day.outputs.date }}
+
