@@ -2,9 +2,9 @@ name: GLaDOS 2026 Checkin
 
 on:
   schedule:
-    # 北京时间 09:30 签到；16:23 和 21:17 补漏。当天成功后自动跳过。
-    - cron: '30 1 * * *'
-    - cron: '23 8 * * *'
+    # 北京时间 09:31 签到；16:37 和 21:17 补漏。当天成功后自动跳过。
+    - cron: '31 1 * * *'
+    - cron: '37 8 * * *'
     - cron: '17 13 * * *'
   workflow_dispatch:
     inputs:
